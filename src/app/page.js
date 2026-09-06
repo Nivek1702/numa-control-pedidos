@@ -71,7 +71,7 @@ export default function Home() {
   const loadOrders = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/orders?role=${role}&userId=${PEOPLE[role].id}`, { cache: "no-store" });
+      const response = await fetch(`/api/orders?role=${role}&userId=${PEOPLE[role].id}`, { cache: "no-store", headers: { "ngrok-skip-browser-warning": "true" } });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "No se pudieron cargar los pedidos.");
       setOrders(result.orders); setSummary(result.summary);
@@ -85,7 +85,7 @@ export default function Home() {
     if (role !== "admin" || adminView !== "products") return;
     const timer = setTimeout(async () => {
       try {
-        const response = await fetch(`/api/analytics?mode=${chartMode}&year=${chartYear}&month=${chartMonth}`, { cache: "no-store" });
+        const response = await fetch(`/api/analytics?mode=${chartMode}&year=${chartYear}&month=${chartMonth}`, { cache: "no-store", headers: { "ngrok-skip-browser-warning": "true" } });
         const result = await response.json();
         if (response.ok) setAnalytics(result);
       } catch { /* La gráfica conserva el último resultado válido. */ }
@@ -99,7 +99,7 @@ export default function Home() {
     setSaving(true); setError(""); setNotice("");
     try {
       const items = [{ product: form.product, quantity: Number(form.quantity), unit: form.unit, unitPrice: Number(form.unitPrice) || 0 }, ...extraItems.map((item) => ({ ...item, quantity: Number(item.quantity), unitPrice: Number(item.unitPrice) || 0 }))];
-      const response = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, items, requestedBy: PEOPLE.worker.id }) });
+      const response = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" }, body: JSON.stringify({ ...form, items, requestedBy: PEOPLE.worker.id }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "No se pudo registrar el pedido.");
       setForm({ ...EMPTY_FORM, requestedDate: form.requestedDate }); setExtraItems([]); setNotice(`Pedido ${result.id ? "registrado" : "guardado"} correctamente.`); await loadOrders();
@@ -110,7 +110,7 @@ export default function Home() {
   async function changeStatus(id, status) {
     setUpdating(id); setError(""); setNotice("");
     try {
-      const response = await fetch(`/api/orders/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role: "worker", userId: PEOPLE.worker.id, status }) });
+      const response = await fetch(`/api/orders/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" }, body: JSON.stringify({ role: "worker", userId: PEOPLE.worker.id, status }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "No se pudo actualizar el pedido.");
       setNotice("Pedido marcado como recepcionado."); await loadOrders();
@@ -123,7 +123,7 @@ export default function Home() {
     if (!insightQuestion.trim() || insightLoading) return;
     setInsightLoading(true); setError("");
     try {
-      const response = await fetch("/api/insights", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: insightQuestion }) });
+      const response = await fetch("/api/insights", { method: "POST", headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" }, body: JSON.stringify({ question: insightQuestion }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "No se pudo generar el resumen.");
       setInsight(result.answer);
