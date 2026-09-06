@@ -56,17 +56,24 @@ create index if not exists idx_orders_user_status on public.orders(user_id, stat
 create index if not exists idx_orders_user_date on public.orders(user_id, requested_date);
 create index if not exists idx_conversations_user_created on public.conversations(user_id, created_at desc);
 
+create schema if not exists private;
+create or replace function private.is_admin(uid uuid)
+returns boolean language sql stable security definer set search_path = public
+as $$ select exists (select 1 from public.profiles where id = uid and role = 'admin'); $$;
+revoke all on function private.is_admin(uuid) from public;
+grant execute on function private.is_admin(uuid) to authenticated;
+
 alter table public.profiles enable row level security;
 alter table public.orders enable row level security;
 alter table public.conversations enable row level security;
 
 drop policy if exists profiles_select_own on public.profiles;
-create policy profiles_select_own on public.profiles
-  for select to authenticated using ((select auth.uid()) = id);
+create policy profiles_select_own_or_admin on public.profiles
+  for select to authenticated using ((select auth.uid()) = id or private.is_admin((select auth.uid())));
 
 drop policy if exists orders_select_own on public.orders;
-create policy orders_select_own on public.orders
-  for select to authenticated using ((select auth.uid()) = user_id);
+create policy orders_select_own_or_admin on public.orders
+  for select to authenticated using ((select auth.uid()) = user_id or private.is_admin((select auth.uid())));
 drop policy if exists orders_insert_own on public.orders;
 create policy orders_insert_own on public.orders
   for insert to authenticated with check ((select auth.uid()) = user_id);

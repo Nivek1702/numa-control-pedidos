@@ -77,7 +77,7 @@ export default function Home() {
   const [chartMonth, setChartMonth] = useState(String(today.getMonth() + 1));
   const [analytics, setAnalytics] = useState({ products: [], year: today.getFullYear(), month: today.getMonth() + 1 });
 
-  useEffect(() => { let active = true; supabase.auth.getSession().then(async ({ data }) => { if (!active) return; setSession(data.session); if (data.session?.user) { const { data: ownProfile } = await supabase.from("profiles").select("name,role").eq("id", data.session.user.id).single(); setProfile(ownProfile); setRole(ownProfile?.role || "worker"); } setAuthLoading(false); }); const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => { setSession(nextSession); if (!nextSession) { setProfile(null); setRole("worker"); } }); return () => { active = false; listener.subscription.unsubscribe(); }; }, [supabase]);
+  useEffect(() => { let active = true; const hydrateProfile = async (user) => { if (!user) { setProfile(null); setRole("worker"); return; } const { data: ownProfile } = await supabase.from("profiles").select("name,role").eq("id", user.id).maybeSingle(); if (active) { setProfile(ownProfile); setRole(ownProfile?.role || "worker"); } }; supabase.auth.getSession().then(async ({ data }) => { if (!active) return; setSession(data.session); await hydrateProfile(data.session?.user); setAuthLoading(false); }); const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => { setSession(nextSession); void hydrateProfile(nextSession?.user); }); return () => { active = false; listener.subscription.unsubscribe(); }; }, [supabase]);
 
   const loadOrders = useCallback(async () => {
     if (!sessionUserId) return;

@@ -11,7 +11,8 @@ export async function GET(request) {
     const mode = params.get("mode") === "year" ? "year" : "month";
     const { supabase, user } = await getAuthenticatedClient();
     if (!user) return NextResponse.json({ error: "Debes iniciar sesión." }, { status: 401 });
-    const data = await getProductAnalytics({ supabase, userId: user.id, mode, year: params.get("year"), month: params.get("month") });
+    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+    const data = await getProductAnalytics({ supabase, userId: user.id, includeAll: profile?.role === "admin", mode, year: params.get("year"), month: params.get("month") });
     return NextResponse.json(data);
   } catch (error) {
     console.error(error);

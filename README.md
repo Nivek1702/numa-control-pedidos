@@ -3,7 +3,7 @@
 Plataforma para registrar pedidos a proveedores y dar seguimiento a su recepción. Incluye autenticación con Supabase Auth y aislamiento por usuario mediante RLS:
 
 - Solicitante: registra proveedor, producto, cantidad, prioridad y fecha requerida; consulta su historial.
-- Administrador: visualiza sus pedidos, métricas, actividad por proveedor y gráficos de productos.
+- Administrador: visualiza sus pedidos y el consolidado de todos los solicitantes, métricas, actividad por proveedor y gráficos de productos.
 - Asistente Numa: guarda cada conversación vinculada al usuario autenticado.
 
 ## Desarrollo local
@@ -24,7 +24,7 @@ NEXT_PUBLIC_APP_URL=https://<tu-tunel-ngrok>
 
 La migración `supabase/migrations/20260906180000_initial_schema.sql` crea perfiles, pedidos y conversaciones con políticas RLS. Ejecuta su contenido en el SQL Editor de Supabase (o con la CLI) antes de iniciar la app. La confirmación de correo debe estar desactivada en Authentication → Sign In / Providers.
 
-Los registros nuevos comienzan como `worker`. Para promover una cuenta administradora, ejecuta en el SQL Editor (solo como propietario del proyecto):
+Los registros nuevos comienzan como `worker`. Para promover una cuenta administradora, ejecuta en el SQL Editor (solo como propietario del proyecto). Las políticas RLS permiten al administrador leer el consolidado, mientras que las conversaciones y las escrituras de pedidos permanecen aisladas por usuario:
 
 ```sql
 update public.profiles set role = 'admin'

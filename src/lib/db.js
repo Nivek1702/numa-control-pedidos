@@ -9,16 +9,19 @@ const rowToOrder = (row) => ({
 
 function ensureUser(userId) { if (!userId) throw new Error("UNAUTHENTICATED"); }
 
-export async function listOrders({ supabase, userId }) {
+export async function listOrders({ supabase, userId, includeAll = false }) {
   ensureUser(userId);
-  const { data, error } = await supabase.from("orders").select("*").eq("user_id", userId).order("created_at", { ascending: false });
+  let query = supabase.from("orders").select("*").order("created_at", { ascending: false });
+  if (!includeAll) query = query.eq("user_id", userId);
+  const { data, error } = await query;
   if (error) throw error;
-  const { data: profile } = await supabase.from("profiles").select("name").eq("id", userId).maybeSingle();
-  return (data || []).map((row) => rowToOrder({ ...row, requested_by_name: profile?.name || "" }));
+  const { data: profiles } = await supabase.from("profiles").select("id,name");
+  const names = new Map((profiles || []).map((profile) => [profile.id, profile.name]));
+  return (data || []).map((row) => rowToOrder({ ...row, requested_by_name: names.get(row.user_id) || "" }));
 }
 
-export async function getOrderSummary({ supabase, userId }) {
-  const orders = await listOrders({ supabase, userId });
+export async function getOrderSummary({ supabase, userId, includeAll = false }) {
+  const orders = await listOrders({ supabase, userId, includeAll });
   const suppliers = new Map();
   for (const order of orders) {
     const current = suppliers.get(order.supplier) || { supplier: order.supplier, total: 0, pending: 0, received: 0 };
@@ -27,13 +30,15 @@ export async function getOrderSummary({ supabase, userId }) {
   return { total: orders.length, pending: orders.filter((o) => o.status === "pending").length, received: orders.filter((o) => o.status === "received").length, totalValue: orders.reduce((s, o) => s + o.total, 0), suppliers: [...suppliers.values()].sort((a, b) => b.total - a.total || a.supplier.localeCompare(b.supplier)).slice(0, 6) };
 }
 
-export async function getProductAnalytics({ supabase, userId, mode = "month", year, month }) {
+export async function getProductAnalytics({ supabase, userId, includeAll = false, mode = "month", year, month }) {
   ensureUser(userId);
   const safeYear = Number(year) || new Date().getFullYear();
   const safeMonth = Math.min(12, Math.max(1, Number(month) || new Date().getMonth() + 1));
   const from = mode === "year" ? `${safeYear}-01-01` : `${safeYear}-${String(safeMonth).padStart(2, "0")}-01`;
   const to = (mode === "year" ? new Date(safeYear + 1, 0, 1) : new Date(safeYear, safeMonth, 1)).toISOString().slice(0, 10);
-  const { data, error } = await supabase.from("orders").select("items,product,quantity,unit").eq("user_id", userId).gte("requested_date", from).lt("requested_date", to);
+  let query = supabase.from("orders").select("items,product,quantity,unit").gte("requested_date", from).lt("requested_date", to);
+  if (!includeAll) query = query.eq("user_id", userId);
+  const { data, error } = await query;
   if (error) throw error;
   const products = new Map();
   for (const row of data || []) {
