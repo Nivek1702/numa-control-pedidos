@@ -76,7 +76,7 @@ create policy orders_select_own_or_admin on public.orders
   for select to authenticated using ((select auth.uid()) = user_id or private.is_admin((select auth.uid())));
 drop policy if exists orders_insert_own on public.orders;
 create policy orders_insert_own on public.orders
-  for insert to authenticated with check ((select auth.uid()) = user_id);
+  for insert to authenticated with check ((select auth.uid()) = user_id and not private.is_admin((select auth.uid())));
 drop policy if exists orders_update_own on public.orders;
 create policy orders_update_own on public.orders
   for update to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
