@@ -1,9 +1,10 @@
 # Numa · Control de pedidos
 
-MVP para registrar pedidos a proveedores y dar seguimiento a su recepción. Incluye dos vistas operativas:
+Plataforma para registrar pedidos a proveedores y dar seguimiento a su recepción. Incluye autenticación con Supabase Auth y aislamiento por usuario mediante RLS:
 
 - Solicitante: registra proveedor, producto, cantidad, prioridad y fecha requerida; consulta su historial.
-- Administrador: visualiza todos los pedidos, métricas agregadas y actividad por proveedor; confirma pedidos recepcionados.
+- Administrador: visualiza sus pedidos, métricas, actividad por proveedor y gráficos de productos.
+- Asistente Numa: guarda cada conversación vinculada al usuario autenticado.
 
 ## Desarrollo local
 
@@ -12,17 +13,26 @@ npm install
 npm run dev
 ```
 
-La base `data-canvas.db` se crea automáticamente con SQLite. El selector de usuario permite probar las dos vistas del MVP (`Ana Torres` y `Carlos Mendoza`). En producción debe sustituirse por autenticación real y autorización basada en sesión.
+Configura `.env.local` a partir de `.env.example`:
+
+```text
+NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<publishable-key>
+OLLAMA_API_KEY=<ollama-key>
+NEXT_PUBLIC_APP_URL=https://<tu-tunel-ngrok>
+```
+
+La migración `supabase/migrations/20260906180000_initial_schema.sql` crea perfiles, pedidos y conversaciones con políticas RLS. Ejecuta su contenido en el SQL Editor de Supabase (o con la CLI) antes de iniciar la app. La confirmación de correo debe estar desactivada en Authentication → Sign In / Providers.
+
+Los registros nuevos comienzan como `worker`. Para promover una cuenta administradora, ejecuta en el SQL Editor (solo como propietario del proyecto):
+
+```sql
+update public.profiles set role = 'admin'
+where id = (select id from auth.users where email = 'admin@tu-dominio.com');
+```
 
 ## Despliegue en Vercel
 
-Las Vercel Functions no tienen un disco local persistente. Para conservar SQLite en producción usa una base libSQL/Turso:
-
-```text
-TURSO_DATABASE_URL=libsql://...
-TURSO_AUTH_TOKEN=...
-```
-
-Las rutas bajo `src/app/api` usan runtime Node.js y mantienen el mismo esquema SQLite en local y en Vercel.
+Las rutas bajo `src/app/api` usan runtime Node.js y consultan Supabase con la sesión del usuario; nunca aceptan un `userId` enviado desde el navegador. Las políticas RLS vuelven a validar la propiedad en la base de datos.
 
 Opcionalmente, configura `OLLAMA_API_KEY` para activar el asistente Numa en la vista administrativa. Sin esa variable, el asistente responde con un resumen local del registro.

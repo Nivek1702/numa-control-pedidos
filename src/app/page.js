@@ -1,17 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createClient } from "@/lib/supabase/browser";
 import {
   Bell, Boxes, CalendarDays, Check, CheckCircle2, ChevronDown, CircleDollarSign, Sparkles, BarChart3,
   Clock3, LoaderCircle, PackageCheck, Plus, Search, ShieldCheck, Truck, UserRound,
 } from "lucide-react";
 
-const PEOPLE = {
-  worker: { id: "ana-torres", name: "Ana Torres", label: "Solicitante" },
-  admin: { id: "carlos-mendoza", name: "Carlos Mendoza", label: "Administrador" },
-};
-
 const EMPTY_FORM = { supplier: "", product: "", quantity: "", unit: "unidades", unitPrice: "", priority: "normal", requestedDate: new Date().toISOString().slice(0, 10), notes: "" };
+
+function AuthScreen() {
+  const supabase = useMemo(() => createClient(), []);
+  const [mode, setMode] = useState("login"); const [email, setEmail] = useState(""); const [password, setPassword] = useState(""); const [name, setName] = useState(""); const [busy, setBusy] = useState(false); const [error, setError] = useState("");
+  async function submit(event) { event.preventDefault(); setBusy(true); setError(""); const result = mode === "login" ? await supabase.auth.signInWithPassword({ email, password }) : await supabase.auth.signUp({ email, password, options: { data: { name } } }); if (result.error) setError(result.error.message); setBusy(false); }
+  return <main className="auth-shell"><div className="auth-card"><div className="brand auth-brand"><span className="brand-mark"><Boxes size={20} /></span><span>Numa</span></div><span className="eyebrow">CONTROL DE PEDIDOS</span><h1>{mode === "login" ? "Inicia sesión" : "Crea tu cuenta"}</h1><p>{mode === "login" ? "Accede a tus pedidos, conversaciones y gráficos." : "Tu correo quedará listo sin confirmación adicional."}</p><form onSubmit={submit}>{mode === "signup" && <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre" required />}<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Correo electrónico" required /><input type="password" minLength="6" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Contraseña" required />{error && <div className="error">{error}</div>}<button className="primary-button" disabled={busy}>{busy ? "Procesando…" : mode === "login" ? "Entrar" : "Registrarme"}</button></form><button className="auth-toggle" onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(""); }}>{mode === "login" ? "Crear una cuenta nueva" : "Ya tengo una cuenta"}</button></div></main>;
+}
 
 function StatusBadge({ status }) {
   return <span className={`status-badge ${status}`}><span />{status === "pending" ? "Pendiente" : "Recepcionado"}</span>;
@@ -46,6 +49,10 @@ function ProductChart({ analytics, mode, year, month, onModeChange, onYearChange
 }
 
 export default function Home() {
+  const supabase = useMemo(() => createClient(), []);
+  const [session, setSession] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [role, setRole] = useState("worker");
   const [orders, setOrders] = useState([]);
   const [summary, setSummary] = useState({ total: 0, pending: 0, received: 0, totalValue: 0, suppliers: [] });
@@ -62,24 +69,30 @@ export default function Home() {
   const [insightQuestion, setInsightQuestion] = useState("");
   const [insight, setInsight] = useState("");
   const [insightLoading, setInsightLoading] = useState(false);
+  const [conversationHistory, setConversationHistory] = useState([]);
   const today = new Date();
+  const sessionUserId = session?.user?.id;
   const [chartMode, setChartMode] = useState("month");
   const [chartYear, setChartYear] = useState(String(today.getFullYear()));
   const [chartMonth, setChartMonth] = useState(String(today.getMonth() + 1));
   const [analytics, setAnalytics] = useState({ products: [], year: today.getFullYear(), month: today.getMonth() + 1 });
 
+  useEffect(() => { let active = true; supabase.auth.getSession().then(async ({ data }) => { if (!active) return; setSession(data.session); if (data.session?.user) { const { data: ownProfile } = await supabase.from("profiles").select("name,role").eq("id", data.session.user.id).single(); setProfile(ownProfile); setRole(ownProfile?.role || "worker"); } setAuthLoading(false); }); const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => { setSession(nextSession); if (!nextSession) { setProfile(null); setRole("worker"); } }); return () => { active = false; listener.subscription.unsubscribe(); }; }, [supabase]);
+
   const loadOrders = useCallback(async () => {
+    if (!sessionUserId) return;
     setLoading(true);
     try {
-      const response = await fetch(`/api/orders?role=${role}&userId=${PEOPLE[role].id}`, { cache: "no-store", headers: { "ngrok-skip-browser-warning": "true" } });
+      const response = await fetch("/api/orders", { cache: "no-store", headers: { "ngrok-skip-browser-warning": "true" } });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "No se pudieron cargar los pedidos.");
       setOrders(result.orders); setSummary(result.summary);
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
-  }, [role]);
+  }, [sessionUserId]);
 
   useEffect(() => { const timer = setTimeout(loadOrders, 0); return () => clearTimeout(timer); }, [loadOrders]);
+  useEffect(() => { if (!sessionUserId) return undefined; let active = true; fetch("/api/insights", { headers: { "ngrok-skip-browser-warning": "true" } }).then((response) => response.json()).then((result) => { if (active && Array.isArray(result.conversations)) setConversationHistory(result.conversations); }).catch(() => {}); return () => { active = false; }; }, [sessionUserId]);
 
   useEffect(() => {
     if (role !== "admin" || adminView !== "products") return;
@@ -99,7 +112,7 @@ export default function Home() {
     setSaving(true); setError(""); setNotice("");
     try {
       const items = [{ product: form.product, quantity: Number(form.quantity), unit: form.unit, unitPrice: Number(form.unitPrice) || 0 }, ...extraItems.map((item) => ({ ...item, quantity: Number(item.quantity), unitPrice: Number(item.unitPrice) || 0 }))];
-      const response = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" }, body: JSON.stringify({ ...form, items, requestedBy: PEOPLE.worker.id }) });
+      const response = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" }, body: JSON.stringify({ ...form, items }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "No se pudo registrar el pedido.");
       setForm({ ...EMPTY_FORM, requestedDate: form.requestedDate }); setExtraItems([]); setNotice(`Pedido ${result.id ? "registrado" : "guardado"} correctamente.`); await loadOrders();
@@ -110,7 +123,7 @@ export default function Home() {
   async function changeStatus(id, status) {
     setUpdating(id); setError(""); setNotice("");
     try {
-      const response = await fetch(`/api/orders/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" }, body: JSON.stringify({ role: "worker", userId: PEOPLE.worker.id, status }) });
+      const response = await fetch(`/api/orders/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" }, body: JSON.stringify({ status }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "No se pudo actualizar el pedido.");
       setNotice("Pedido marcado como recepcionado."); await loadOrders();
@@ -126,7 +139,7 @@ export default function Home() {
       const response = await fetch("/api/insights", { method: "POST", headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" }, body: JSON.stringify({ question: insightQuestion }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "No se pudo generar el resumen.");
-      setInsight(result.answer);
+      setInsight(result.answer); setConversationHistory((current) => [{ question: insightQuestion.trim(), answer: result.answer, created_at: new Date().toISOString() }, ...current].slice(0, 20));
     } catch (err) { setError(err.message); }
     finally { setInsightLoading(false); }
   }
@@ -136,9 +149,12 @@ export default function Home() {
   const maxSupplierOrders = Math.max(1, ...summary.suppliers.map((supplier) => supplier.total));
   const isAdmin = role === "admin";
 
+  if (authLoading) return <main className="auth-shell"><LoaderCircle className="spin" /></main>;
+  if (!session) return <AuthScreen />;
+
   return (
     <main className="app-shell">
-      <header className="topbar"><div className="brand"><span className="brand-mark"><Boxes size={20} /></span><span>Numa</span><span className="brand-rule" /><span className="workspace-name">Control de pedidos</span></div><div className="top-actions"><span className="db-status"><i /> SQLite conectado</span><button className="icon-button" aria-label="Notificaciones"><Bell size={17} /></button><label className="role-switch"><UserRound size={14} /><select value={role} onChange={(event) => { setRole(event.target.value); setNotice(""); setError(""); }}><option value="worker">Ana Torres · Solicitante</option><option value="admin">Carlos Mendoza · Administrador</option></select><ChevronDown size={14} /></label></div></header>
+      <header className="topbar"><div className="brand"><span className="brand-mark"><Boxes size={20} /></span><span>Numa</span><span className="brand-rule" /><span className="workspace-name">Control de pedidos</span></div><div className="top-actions"><span className="db-status"><i /> Supabase conectado</span><button className="icon-button" aria-label="Notificaciones"><Bell size={17} /></button><span className="role-switch"><UserRound size={14} /> {profile?.name || session.user.email} · {isAdmin ? "Administrador" : "Solicitante"}</span><button className="auth-logout" onClick={() => supabase.auth.signOut()}>Salir</button></div></header>
 
       <section className="page-wrap">
         <div className="page-intro"><div><span className="eyebrow">{isAdmin ? "VISTA ADMINISTRADOR" : "VISTA SOLICITANTE"}</span><h1>{isAdmin ? "Resumen de pedidos" : "Mis pedidos"}</h1><p>{isAdmin ? "Supervisa el flujo de compras y analiza las cantidades solicitadas." : "Registra una solicitud y confirma su recepción cuando llegue."}</p></div><div className="date-chip"><CalendarDays size={15} /> {new Date().toLocaleDateString("es-PE", { weekday: "long", day: "numeric", month: "long" })}</div></div>
