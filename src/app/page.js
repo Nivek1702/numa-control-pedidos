@@ -53,6 +53,7 @@ export default function Home() {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(true);
   const [role, setRole] = useState("worker");
   const [orders, setOrders] = useState([]);
   const [summary, setSummary] = useState({ total: 0, pending: 0, received: 0, totalValue: 0, suppliers: [] });
@@ -77,7 +78,32 @@ export default function Home() {
   const [chartMonth, setChartMonth] = useState(String(today.getMonth() + 1));
   const [analytics, setAnalytics] = useState({ products: [], year: today.getFullYear(), month: today.getMonth() + 1 });
 
-  useEffect(() => { let active = true; const hydrateProfile = async (user) => { if (!user) { setProfile(null); setRole("worker"); return; } const { data: ownProfile } = await supabase.from("profiles").select("name,role").eq("id", user.id).maybeSingle(); if (active) { setProfile(ownProfile); setRole(ownProfile?.role || "worker"); } }; supabase.auth.getSession().then(async ({ data }) => { if (!active) return; setSession(data.session); await hydrateProfile(data.session?.user); setAuthLoading(false); }); const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => { setSession(nextSession); void hydrateProfile(nextSession?.user); }); return () => { active = false; listener.subscription.unsubscribe(); }; }, [supabase]);
+  useEffect(() => {
+    let active = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      setSession(data.session);
+      setProfile(null); setRole("worker"); setProfileLoading(Boolean(data.session));
+      setAuthLoading(false);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setProfile(null); setRole("worker"); setProfileLoading(Boolean(nextSession));
+    });
+    return () => { active = false; listener.subscription.unsubscribe(); };
+  }, [supabase]);
+
+  useEffect(() => {
+    let active = true;
+    if (!sessionUserId) {
+      return () => { active = false; };
+    }
+    supabase.from("profiles").select("name,role").eq("id", sessionUserId).maybeSingle().then(({ data }) => {
+      if (!active) return;
+      setProfile(data); setRole(data?.role || "worker"); setProfileLoading(false);
+    });
+    return () => { active = false; };
+  }, [supabase, sessionUserId]);
 
   const loadOrders = useCallback(async () => {
     if (!sessionUserId) return;
@@ -149,7 +175,7 @@ export default function Home() {
   const maxSupplierOrders = Math.max(1, ...summary.suppliers.map((supplier) => supplier.total));
   const isAdmin = role === "admin";
 
-  if (authLoading) return <main className="auth-shell"><LoaderCircle className="spin" /></main>;
+  if (authLoading || (session && profileLoading)) return <main className="auth-shell"><LoaderCircle className="spin" /></main>;
   if (!session) return <AuthScreen />;
 
   return (
