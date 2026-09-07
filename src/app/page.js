@@ -90,9 +90,13 @@ export default function Home() {
       if (!active) return;
       setSession(null); setProfile(null); setRole("worker"); setProfileLoading(false); setAuthLoading(false);
     });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession);
-      setProfile(null); setRole("worker"); setProfileLoading(Boolean(nextSession));
+      if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
+        setProfile(null); setRole("worker"); setProfileLoading(Boolean(nextSession));
+      } else if (event === "SIGNED_OUT") {
+        setProfile(null); setRole("worker"); setProfileLoading(false);
+      }
     });
     return () => { active = false; listener.subscription.unsubscribe(); };
   }, [supabase]);
