@@ -81,7 +81,7 @@ export default function Home() {
   useEffect(() => {
     let active = true;
     const withTimeout = (promise, milliseconds) => Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), milliseconds))]);
-    withTimeout(supabase.auth.getSession(), 8000).then(({ data }) => {
+    withTimeout(supabase.auth.getSession(), 3000).then(({ data }) => {
       if (!active) return;
       setSession(data.session);
       setProfile(null); setRole("worker"); setProfileLoading(Boolean(data.session));
@@ -107,7 +107,7 @@ export default function Home() {
       return () => { active = false; };
     }
     const profileRequest = supabase.from("profiles").select("name,role").eq("id", sessionUserId).maybeSingle();
-    Promise.race([profileRequest, new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000))]).then(({ data }) => {
+    Promise.race([profileRequest, new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 3000))]).then(({ data }) => {
       if (!active) return;
       setProfile(data); setRole(data?.role || "worker"); setProfileLoading(false);
     }).catch(() => { if (active) { setProfile(null); setRole("worker"); setProfileLoading(false); } });
@@ -184,7 +184,7 @@ export default function Home() {
   const maxSupplierOrders = Math.max(1, ...summary.suppliers.map((supplier) => supplier.total));
   const isAdmin = role === "admin";
 
-  if (authLoading || (session && profileLoading)) return <main className="auth-shell"><LoaderCircle className="spin" /></main>;
+  if (authLoading) return <main className="auth-shell"><LoaderCircle className="spin" /></main>;
   if (!session) return <AuthScreen />;
 
   return (
