@@ -54,6 +54,7 @@ export default function Home() {
   const [profile, setProfile] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(true);
+  const [profileRefresh, setProfileRefresh] = useState(0);
   const [role, setRole] = useState("worker");
   const [orders, setOrders] = useState([]);
   const [summary, setSummary] = useState({ total: 0, pending: 0, received: 0, totalValue: 0, suppliers: [] });
@@ -94,6 +95,7 @@ export default function Home() {
       setSession(nextSession);
       if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
         setProfile(null); setRole("worker"); setProfileLoading(Boolean(nextSession));
+        setProfileRefresh((value) => value + 1);
       } else if (event === "SIGNED_OUT") {
         setProfile(null); setRole("worker"); setProfileLoading(false);
       }
@@ -112,7 +114,7 @@ export default function Home() {
       setProfile(data); setRole(data?.role || "worker"); setProfileLoading(false);
     }).catch(() => { if (active) { setProfile(null); setRole("worker"); setProfileLoading(false); } });
     return () => { active = false; };
-  }, [supabase, sessionUserId]);
+  }, [supabase, sessionUserId, profileRefresh]);
 
   const loadOrders = useCallback(async () => {
     if (!sessionUserId) return;
