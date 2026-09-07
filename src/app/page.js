@@ -78,6 +78,9 @@ export default function Home() {
   const [chartYear, setChartYear] = useState(String(today.getFullYear()));
   const [chartMonth, setChartMonth] = useState(String(today.getMonth() + 1));
   const [analytics, setAnalytics] = useState({ products: [], year: today.getFullYear(), month: today.getMonth() + 1 });
+  const readCachedProfile = useCallback((userId) => {
+    try { return JSON.parse(window.localStorage.getItem(`numa-profile-${userId}`) || "null"); } catch { return null; }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -85,7 +88,8 @@ export default function Home() {
     withTimeout(supabase.auth.getSession(), 3000).then(({ data }) => {
       if (!active) return;
       setSession(data.session);
-      setProfile(null); setRole("worker"); setProfileLoading(Boolean(data.session));
+      const cached = data.session?.user ? readCachedProfile(data.session.user.id) : null;
+      setProfile(cached); setRole(cached?.role || "worker"); setProfileLoading(Boolean(data.session && !cached));
       setAuthLoading(false);
     }).catch(() => {
       if (!active) return;
@@ -94,14 +98,16 @@ export default function Home() {
     const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession);
       if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
-        setProfile(null); setRole("worker"); setProfileLoading(Boolean(nextSession));
+        const cached = nextSession?.user ? readCachedProfile(nextSession.user.id) : null;
+        if (cached) { setProfile(cached); setRole(cached.role || "worker"); }
+        setProfileLoading(Boolean(nextSession && !cached));
         setProfileRefresh((value) => value + 1);
       } else if (event === "SIGNED_OUT") {
         setProfile(null); setRole("worker"); setProfileLoading(false);
       }
     });
     return () => { active = false; listener.subscription.unsubscribe(); };
-  }, [supabase]);
+  }, [supabase, readCachedProfile]);
 
   useEffect(() => {
     let active = true;
@@ -112,6 +118,7 @@ export default function Home() {
     Promise.race([profileRequest, new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 3000))]).then(({ data }) => {
       if (!active) return;
       setProfile(data); setRole(data?.role || "worker"); setProfileLoading(false);
+      try { window.localStorage.setItem(`numa-profile-${sessionUserId}`, JSON.stringify(data)); } catch { /* almacenamiento opcional */ }
     }).catch(() => { if (active) { setProfile(null); setRole("worker"); setProfileLoading(false); } });
     return () => { active = false; };
   }, [supabase, sessionUserId, profileRefresh]);
