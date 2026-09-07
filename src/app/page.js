@@ -80,11 +80,15 @@ export default function Home() {
 
   useEffect(() => {
     let active = true;
-    supabase.auth.getSession().then(({ data }) => {
+    const withTimeout = (promise, milliseconds) => Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), milliseconds))]);
+    withTimeout(supabase.auth.getSession(), 8000).then(({ data }) => {
       if (!active) return;
       setSession(data.session);
       setProfile(null); setRole("worker"); setProfileLoading(Boolean(data.session));
       setAuthLoading(false);
+    }).catch(() => {
+      if (!active) return;
+      setSession(null); setProfile(null); setRole("worker"); setProfileLoading(false); setAuthLoading(false);
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
@@ -98,10 +102,11 @@ export default function Home() {
     if (!sessionUserId) {
       return () => { active = false; };
     }
-    supabase.from("profiles").select("name,role").eq("id", sessionUserId).maybeSingle().then(({ data }) => {
+    const profileRequest = supabase.from("profiles").select("name,role").eq("id", sessionUserId).maybeSingle();
+    Promise.race([profileRequest, new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000))]).then(({ data }) => {
       if (!active) return;
       setProfile(data); setRole(data?.role || "worker"); setProfileLoading(false);
-    });
+    }).catch(() => { if (active) { setProfile(null); setRole("worker"); setProfileLoading(false); } });
     return () => { active = false; };
   }, [supabase, sessionUserId]);
 
